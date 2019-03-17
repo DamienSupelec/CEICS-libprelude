@@ -83,6 +83,12 @@ void prelude_client_profile_get_tls_client_keycert_filename(const prelude_client
 
 void prelude_client_profile_get_tls_client_trusted_cert_filename(const prelude_client_profile_t *cp, char *buf, size_t size);
 
+void prelude_client_profile_get_pki_key_filename(const prelude_client_profile_t *cp, char *buf, size_t size);
+
+void prelude_client_profile_get_pki_pubcert_filename(const prelude_client_profile_t *cp, char *buf, size_t size);
+
+void prelude_client_profile_get_pki_cacert_filename(const prelude_client_profile_t *cp, char *buf, size_t size);
+
 void prelude_client_profile_get_backup_dirname(const prelude_client_profile_t *cp, char *buf, size_t size);
 
 void prelude_client_profile_get_profile_dirname(const prelude_client_profile_t *cp, char *buf, size_t size);
@@ -104,6 +110,10 @@ uint64_t prelude_client_profile_get_analyzerid(const prelude_client_profile_t *c
 void prelude_client_profile_set_analyzerid(prelude_client_profile_t *cp, uint64_t analyzerid);
 
 int prelude_client_profile_get_credentials(prelude_client_profile_t *cp, void **credentials);
+
+int prelude_client_profile_get_pkicredentials(prelude_client_profile_t *cp, void **pkicredentials);
+
+int prelude_client_profile_get_allcredentials(prelude_client_profile_t *cp, void **credentials, void **pkicredentials);
 
 int prelude_client_profile_set_prefix(prelude_client_profile_t *cp, const char *prefix);
 

@@ -1395,7 +1395,7 @@ int prelude_client_init(prelude_client_t *client)
 int prelude_client_start(prelude_client_t *client)
 {
         int ret;
-        void *credentials;
+        void *credentials, *pkicredentials;
 
         prelude_return_val_if_fail(client, prelude_error(PRELUDE_ERROR_ASSERTION));
 
@@ -1412,7 +1412,7 @@ int prelude_client_start(prelude_client_t *client)
                 if ( ! client->cpool )
                         return prelude_error(PRELUDE_ERROR_CONNECTION_STRING);
 
-                ret = prelude_client_profile_get_credentials(client->profile, &credentials);
+                ret = prelude_client_profile_get_allcredentials(client->profile, &credentials, &pkicredentials);
                 if ( ret < 0 )
                         return handle_client_error(client, ret);
 

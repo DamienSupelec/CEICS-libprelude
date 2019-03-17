@@ -22,6 +22,7 @@ libprelude_la_SOURCES = 		\
 	daemonize.c			\
 	ntp.c				\
 	tls-auth.c			\
+	pki-auth.c                      \
 	tls-util.c			\
 	variable.c			\
 	prelude.c			\

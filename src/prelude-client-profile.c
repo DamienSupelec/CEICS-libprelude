@@ -39,6 +39,7 @@
 #include "prelude-error.h"
 #include "prelude-client-profile.h"
 #include "tls-auth.h"
+#include "pki-auth.h"
 #include "common.h"
 
 #if (defined _WIN32 || defined __WIN32__) && !defined __CYGWIN__
@@ -76,6 +77,7 @@ struct prelude_client_profile {
         char *name;
         uint64_t analyzerid;
         gnutls_certificate_credentials_t credentials;
+	pki_credentials_t *pkicredentials;
 };
 
 
@@ -464,7 +466,80 @@ void prelude_client_profile_get_tls_client_keycert_filename(const prelude_client
         gl_lock_unlock(lock);
 }
 
+/**
+ * prelude_client_profile_get_pki_key_filename:
+ * @cp: pointer on a #prelude_client_profile_t object.
+ * @buf: buffer to write the returned filename to.
+ * @size: size of @buf.
+ *
+ * Write the filename used to store @cp private key for PKI mode.
+ */
+void prelude_client_profile_get_pki_key_filename(const prelude_client_profile_t *cp, char *buf, size_t size)
+{
+	const char *prefix;
+	prelude_return_if_fail(cp);
+	prelude_return_if_fail(buf);
+	
+	gl_lock_lock(lock);
 
+	prefix = init_once_and_get_prefix();
+	if ( ! relative_profile_dir )
+		snprintf(buf, size, "%s/%s/pki-privkey.key", PRELUDE_PROFILE_DIR, cp->name);
+	else
+		snprintf(buf, size, "%s/%s/%s/pki-privkey.key", prefix, relative_profile_dir, cp->name);
+
+	gl_lock_unlock(lock);
+}
+
+/**
+ * prelude_client_profile_get_pki_pubcert_filename:
+ * @cp: pointer on a #prelude_client_profile_t object.
+ * @buf: buffer to write the returned filename to.
+ * @size: size of @buf.
+ *
+ * Write the filename used to store @cp public certificate for PKI mode.
+ */
+void prelude_client_profile_get_pki_pubcert_filename(const prelude_client_profile_t *cp, char *buf, size_t size)
+{
+	const char *prefix;
+	prelude_return_if_fail(cp);
+	prelude_return_if_fail(buf);
+	
+	gl_lock_lock(lock);
+
+	prefix = init_once_and_get_prefix();
+	if ( ! relative_profile_dir )
+		snprintf(buf, size, "%s/%s/pki-pubcert.pem", PRELUDE_PROFILE_DIR, cp->name);
+	else
+		snprintf(buf, size, "%s/%s/%s/pki-pubcert.pem", prefix, relative_profile_dir, cp->name);
+
+	gl_lock_unlock(lock);
+}
+
+/**
+ * prelude_client_profile_get_pki_cacert_filename:
+ * @cp: pointer on a #prelude_client_profile_t object.
+ * @buf: buffer to write the returned filename to.
+ * @size: size of @buf.
+ *
+ * Write the filename used to store @cp the trusted CA certificates for PKI mode.
+ */
+void prelude_client_profile_get_pki_cacert_filename(const prelude_client_profile_t *cp, char *buf, size_t size)
+{
+	const char *prefix;
+	prelude_return_if_fail(cp);
+	prelude_return_if_fail(buf);
+	
+	gl_lock_lock(lock);
+
+	prefix = init_once_and_get_prefix();
+	if ( ! relative_profile_dir )
+		snprintf(buf, size, "%s/%s/pki-cacert.pem", PRELUDE_PROFILE_DIR, cp->name);
+	else
+		snprintf(buf, size, "%s/%s/%s/pki-cacert.pem", prefix, relative_profile_dir, cp->name);
+
+	gl_lock_unlock(lock);
+}
 
 /**
  * prelude_client_profile_get_backup_dirname:
@@ -610,6 +685,9 @@ void prelude_client_profile_destroy(prelude_client_profile_t *cp)
 
         if ( cp->credentials )
                 gnutls_certificate_free_credentials(cp->credentials);
+
+	if ( cp->pkicredentials )
+		pki_credentials_destroy(cp->pkicredentials);
 
         if ( cp->name )
                 free(cp->name);
@@ -770,7 +848,7 @@ int prelude_client_profile_get_credentials(prelude_client_profile_t *cp, void **
 
         if ( cp->credentials ) {
                 *credentials = cp->credentials;
-                return 0;
+		return 0;
         }
 
         ret = tls_auth_init(cp, &cp->credentials);
@@ -782,6 +860,72 @@ int prelude_client_profile_get_credentials(prelude_client_profile_t *cp, void **
         return 0;
 }
 
+/**
+ * prelude_client_profile_get_pkicrendentials:
+ * @cp: Pointer to a #prelude_client_profile_t object.
+ * @pkicredentials: The pki credentials retrieved.
+ *
+ * Gets the prelude client profile pki credentials
+ *
+ * Returns: 0 on success or a negative value if an error occured.
+ */
+int prelude_client_profile_get_pkicredentials(prelude_client_profile_t *cp, void **pkicredentials)
+{
+        int ret;
+
+        prelude_return_val_if_fail(cp, prelude_error(PRELUDE_ERROR_ASSERTION));
+
+        if ( cp->pkicredentials ) {
+                *pkicredentials = cp->pkicredentials;
+		return 0;
+        }
+
+        ret = pki_auth_init(cp, &cp->pkicredentials);
+        if ( ret < 0 )
+                return ret;
+
+        *pkicredentials = cp->pkicredentials;
+
+        return 0;
+}
+
+/**
+ * prelude_client_profile_get_allcrendentials:
+ * @cp: Pointer to a #prelude_client_profile_t object.
+ * @credentials: the GNU TLS certificates credentials
+ * @pkicredentials: The pki credentials retrieved.
+ *
+ * Gets the prelude client profile pki credentials
+ *
+ * Returns: 0 on success or a negative value if an error occured.
+ */
+int prelude_client_profile_get_allcredentials(prelude_client_profile_t *cp, void **credentials, void **pkicredentials)
+{
+        int ret;
+	void *tmpcred;
+
+        prelude_return_val_if_fail(cp, prelude_error(PRELUDE_ERROR_ASSERTION));
+
+        if ( cp->credentials ) {
+                *credentials = cp->credentials;
+	} else {
+		ret = prelude_client_profile_get_credentials(cp, &tmpcred);
+		if ( ret < 0 )
+			return ret;
+		credentials = tmpcred;
+	}
+
+        if ( cp->pkicredentials ) {
+                *pkicredentials = cp->pkicredentials;
+		return 0;
+        } else {
+		ret = prelude_client_profile_get_pkicredentials(cp, &tmpcred);
+		if ( ret < 0 )
+			return ret;
+        	*pkicredentials = tmpcred;
+	}
+        return 0;
+}
 
 prelude_client_profile_t *prelude_client_profile_ref(prelude_client_profile_t *cp)
 {
