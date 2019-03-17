@@ -83,6 +83,16 @@
  */
 #define UNIX_SOCKET "/tmp/.prelude-unix"
 
+/*
+ * Default MQTT address
+ */
+#define MQTT_ADDR "localhost"
+
+/*
+ * Default MQTT port
+ */
+#define MQTT_PORT 8883
+
 
 /*
  * FIXME: we need a high level configuration object allowing
@@ -115,6 +125,7 @@ struct prelude_connection {
         void *data;
         prelude_msg_t *msg;
 
+	prelude_connection_type_t type;
         prelude_connection_state_t state;
 };
 
@@ -500,6 +511,32 @@ static prelude_bool_t is_unix_addr(prelude_connection_t *cnx, const char *addr)
         return TRUE;
 }
 
+static prelude_bool_t is_mqtt_addr(prelude_connection_t *cnx, const char *addr)
+{
+	int ret;
+	const char *ptr;
+	char *daddr;
+	unsigned int dport;
+	
+	ret = strncmp(addr, "mqtt", 4);
+	if ( ret != 0 )
+		return FALSE;
+
+	ptr = strchr(addr, ':');
+	if ( ptr && *(ptr + 1) ){
+		cnx->dport = MQTT_PORT;
+		ret = prelude_parse_address(ptr + 1, &daddr, &dport);
+		if ( ret < 0 )
+			return ret;
+		cnx->daddr = daddr;
+		cnx->dport = dport;
+	} else {
+		cnx->daddr = strdup(MQTT_ADDR);
+		cnx->dport = MQTT_PORT;
+	}
+	return TRUE;
+}
+
 
 
 static int do_getaddrinfo(prelude_connection_t *cnx, struct addrinfo **ai, const char *addr_string)
@@ -549,17 +586,22 @@ static int resolve_addr(prelude_connection_t *cnx, const char *addr)
 #if !((defined _WIN32 || defined __WIN32__) && !defined __CYGWIN__)
         struct sockaddr_un *un;
 #endif
-
-        if ( is_unix_addr(cnx, addr) ) {
+	
+	if ( is_mqtt_addr(cnx, addr) ) {
+		cnx->type = PRELUDE_CONNECTION_TYPE_MQTT;
+		return 0;	
+	} else if ( is_unix_addr(cnx, addr) ) {
 #if (defined _WIN32 || defined __WIN32__) && !defined __CYGWIN__
                 return prelude_error_verbose(PRELUDE_ERROR_GENERIC, "UNIX socket are not supported under this environment");
 #else
+		cnx->type = PRELUDE_CONNECTION_TYPE_UNIX;
                 ai_family = AF_UNIX;
                 ai_addrlen = sizeof(*un);
 #endif
         }
 
         else {
+		cnx->type = PRELUDE_CONNECTION_TYPE_TLS;
                 ret = do_getaddrinfo(cnx, &ai, addr);
                 if ( ret < 0 )
                         return ret;
