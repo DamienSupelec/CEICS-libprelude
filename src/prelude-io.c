@@ -863,14 +863,14 @@ int prelude_io_set_buffer_io(prelude_io_t *pio)
         return 0;
 }
 
-void prelude_io_set_mqtt_io(prelude_io_t *pio, MQTT_transporter_t *transporter)
+void prelude_io_set_mqtt_io(prelude_io_t *pio, void *transporter)
 {
 	prelude_return_if_fail(pio);
 
 	pio->fd_ptr = NULL;
 	pio->size = pio->rindex = 0;
 	
-	pio->fd_ptr = (void *) transporter;
+	pio->fd_ptr = transporter;
 	pio->read = mqtt_read;
 	pio->write = mqtt_write;
 	pio->close = mqtt_close;
