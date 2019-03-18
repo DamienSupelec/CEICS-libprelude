@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "prelude-inttypes.h"
-
+#include "mqtt-trans.h"
 
 typedef struct prelude_io prelude_io_t;
 
@@ -54,6 +54,7 @@ void prelude_io_set_sys_io(prelude_io_t *pio, int fd);
 
 int prelude_io_set_buffer_io(prelude_io_t *pio);
 
+void prelude_io_set_mqtt_io(prelude_io_t *pio, MQTT_transporter_t *transporter);
 
 /*
  *

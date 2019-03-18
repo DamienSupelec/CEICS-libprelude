@@ -44,7 +44,7 @@
 #include "prelude-log.h"
 #include "prelude-io.h"
 #include "common.h"
-
+#include "mqtt-trans.h"
 
 #define PRELUDE_ERROR_SOURCE_DEFAULT PRELUDE_ERROR_SOURCE_IO
 #include "prelude-error.h"
@@ -63,6 +63,8 @@ struct prelude_io {
 
         size_t size;
         size_t rindex;
+
+	void *transporter;
 
         int (*close)(prelude_io_t *pio);
         ssize_t (*read)(prelude_io_t *pio, void *buf, size_t count);
@@ -393,6 +395,58 @@ static ssize_t tls_pending(prelude_io_t *pio)
                 return ret;
 
         return 0;
+}
+
+/*
+ * MQTT I/O functions 
+ */ 
+
+static ssize_t mqtt_read(prelude_io_t *pio, void *buf, size_t count)
+{
+	ssize_t ret;
+	
+	do {
+		ret = read(pio->fd, buf, count);
+	} while ( ret < 0 && errno == EINTR );
+	if ( ret == 0 )
+		return prelude_error(PRELUDE_ERROR_EOF);
+	if ( ret < 0 )
+		return prelude_error_from_errno(errno);
+	return ret;	
+}
+
+static ssize_t mqtt_write(prelude_io_t *pio, const void *buf, size_t count)
+{
+	int ret;
+	
+	ret = MQTT_transporter_send((MQTT_transporter_t *) pio->transporter, buf, count);
+	if ( ret < 0 )
+		return prelude_error_from_errno(errno);
+	return ret;
+
+}
+
+static ssize_t mqtt_pending(prelude_io_t *pio)
+{
+	long ret = 0;
+	
+	if ( ioctl(pio->fd, FIONREAD, &ret) < 0 )
+		return prelude_error_from_errno(errno);
+	return ret;	
+}
+
+static ssize_t mqtt_close(prelude_io_t *pio)
+{
+	if ( pio->transporter ){
+		MQTT_transporter_disconnect((MQTT_transporter_t *) pio->transporter);
+		MQTT_transporter_destroy((MQTT_transporter_t **) &pio->transporter);
+		pio->transporter = NULL;		
+	}
+	if ( pio->fd ){
+		close(pio->fd);
+		pio->fd = 0;
+	}
+	return 0;	
 }
 
 
@@ -811,7 +865,21 @@ int prelude_io_set_buffer_io(prelude_io_t *pio)
         return 0;
 }
 
+void prelude_io_set_mqtt_io(prelude_io_t *pio, MQTT_transporter_t *transporter)
+{
+	int ret;
 
+	prelude_return_val_if_fail(pio, prelude_error(PRELUDE_ERROR_ASSERTION));
+
+	pio->fd_ptr = NULL;
+	pio->size = pio->rindex = 0;
+	
+	pio->transporter = transporter;
+	pio->read = mqtt_read;
+	pio->write = mqtt_write;
+	pio->close = mqtt_close;
+	pio->pending = mqtt_pending;
+}
 
 /**
  * prelude_io_get_fd:

@@ -255,6 +255,29 @@ fi
 
 LIBPRELUDE_LIBS="$LIBPRELUDE_LIBS $LIBGNUTLS_LIBS"
 
+dnl **************************************************
+dnl * Check for Paho MQTT Async library.             *
+dnl **************************************************
+
+old_LIBS=$LIBS
+old_CPPFLAGS=$CPPFLAGS
+LIBMQTT3AS_LIBS="paho-mqtt3as"
+LIBMQTT3AS_CFLAGS=""
+LIBMQTT3AS_LDFLAGS="-lpaho-mqtt3as"
+LIBS="$LIBMQTT3AS_LIBS"
+CPPFLAGS="$LIBMQTT3A_CFLAGS"
+
+AC_CHECK_HEADER(MQTTAsync.h, ,
+                AC_MSG_ERROR("Paho MQTT3 Asynchronous library header required to build libprelude"))
+#AC_CHECK_LIB(paho-mqtt3as, MQTTAsync_connect, , AC_MSG_ERROR("Paho MQTT3 Asynchronous library required to build libprelude"))
+
+AC_SUBST(LIBMQTT3AS_CFLAGS)
+AC_SUBST(LIBMQTT3AS_LDFLAGS)
+AC_SUBST(LIBMQTT3AS_LIBS)
+
+LIBS=$old_LIBS
+CPPFLAGS=$old_CPPFLAGS
+
 
 dnl **************************************************
 dnl * Check for Ipv6.                                *
