@@ -68,6 +68,8 @@
 #include "prelude-linked-object.h"
 
 #include "tls-auth.h"
+#include "pki-auth.h"
+#include "mqtt-trans.h"
 
 
 #define PRELUDE_CONNECTION_OWN_FD 0x02
@@ -339,7 +341,48 @@ static int handle_authentication(prelude_connection_t *cnx,
 }
 
 
+static int start_mqtt_connection(prelude_connection_t *cnx, 
+                                 prelude_connection_permission_t reqperms, prelude_client_profile_t *profile)
+{
+	int ret;
+	int rfd;
+	MQTT_transporter_t *trans;
+	pki_credentials_t *cred;
 
+	ret = prelude_client_profile_get_pkicredentials(profile, (void **) &cred);
+
+	ret = MQTT_transporter_new(&trans, &rfd, cnx->daddr, cnx->dport);
+	if ( ret < 0 )
+		return ret;
+	
+	ret = MQTT_transporter_set_pkicredentials(trans, pki_credentials_get_pubcert(cred), pki_credentials_get_privkey(cred), pki_credentials_get_trustca(cred));
+	if ( ret < 0 ){
+		MQTT_transporter_destroy(&trans);
+		return ret;
+	}
+	
+	ret = MQTT_transporter_set_credentials(trans, "mqtt_u1", "mqtt_p1");
+	if ( ret < 0 ){
+		MQTT_transporter_destroy(&trans);
+		return ret;
+	}
+
+	ret = MQTT_transporter_connect(trans);
+	if ( ret < 0 ){
+		MQTT_transporter_destroy(&trans);
+		return ret;
+	}
+
+	ret = MQTT_transporter_add_pub_topic(trans, "testprelude");
+	if ( ret < 0 ){
+		MQTT_transporter_destroy(&trans);
+		return ret;
+	}
+
+	prelude_io_set_mqtt_io(cnx->fd, trans);
+
+	return 0;
+}
 
 
 static int start_inet_connection(prelude_connection_t *cnx,
@@ -426,6 +469,12 @@ static int do_connect(prelude_connection_t *cnx,
                       prelude_connection_permission_t reqperms, prelude_client_profile_t *profile)
 {
         int ret = 0;
+
+	if ( cnx->type == PRELUDE_CONNECTION_TYPE_MQTT ) {
+                prelude_log(PRELUDE_LOG_INFO, "Connecting to MQTT broker %s .\n", cnx->daddr);
+		ret = start_mqtt_connection(cnx, reqperms, profile);
+		return ret;
+	}
 
         if ( cnx->sa->sa_family != AF_UNIX ) {
                 prelude_log(PRELUDE_LOG_INFO, "Connecting to %s prelude Manager server.\n", cnx->daddr);

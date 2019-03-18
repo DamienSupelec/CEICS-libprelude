@@ -31,6 +31,12 @@ int pki_credentials_new(pki_credentials_t **newcred);
 
 void pki_credentials_destroy(pki_credentials_t *cred);
 
+char *pki_credentials_get_pubcert(pki_credentials_t *cred);
+
+char *pki_credentials_get_privkey(pki_credentials_t *cred);
+
+char *pki_credentials_get_trustca(pki_credentials_t *cred);
+
 int pki_auth_init(prelude_client_profile_t *cp, pki_credentials_t **cred);
 
 #ifdef __cplusplus

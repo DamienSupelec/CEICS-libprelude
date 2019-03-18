@@ -127,3 +127,27 @@ int pki_auth_init(prelude_client_profile_t *cp, pki_credentials_t **cred)
 	return 0;
 }
 
+char *pki_credentials_get_pubcert(pki_credentials_t *cred)
+{
+	prelude_return_val_if_fail(cred, NULL);
+	prelude_return_val_if_fail(cred->pubcert_filename, NULL);
+	
+	return cred->pubcert_filename;		
+}
+
+char *pki_credentials_get_privkey(pki_credentials_t *cred)
+{
+	prelude_return_val_if_fail(cred, NULL);
+	prelude_return_val_if_fail(cred->privkey_filename, NULL);
+	
+	return cred->privkey_filename;		
+}
+
+char *pki_credentials_get_trustca(pki_credentials_t *cred)
+{
+	prelude_return_val_if_fail(cred, NULL);
+	prelude_return_val_if_fail(cred->trustca_filename, NULL);
+	
+	return cred->trustca_filename;		
+}
+
