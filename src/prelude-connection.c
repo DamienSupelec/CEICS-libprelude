@@ -74,6 +74,7 @@
 
 #define PRELUDE_CONNECTION_OWN_FD 0x02
 
+#define DEFAULT_MQTT_PUB_TOPIC "pubprelude"
 
 /*
  * Default port to connect to.
@@ -116,6 +117,7 @@ struct prelude_connection {
 
         char *daddr;
         unsigned int dport;
+	void *extra_ddata;
 
         socklen_t salen;
         struct sockaddr *sa;
@@ -340,6 +342,37 @@ static int handle_authentication(prelude_connection_t *cnx,
         return 0;
 }
 
+static int mqtt_add_pub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transporter_t *trans)
+{
+	char *topics, *ptr;
+	int count, ret;
+
+	topics = (char *) cnx->extra_ddata;
+
+	count = 0;
+	if ( ! topics ){
+	 	ret = MQTT_transporter_add_pub_topic(trans, DEFAULT_MQTT_PUB_TOPIC);
+		if (ret < 0)
+			return ret;
+		++count;
+		return count;
+	}
+	
+	while ( (ptr = strchr(topics, ',')) && *(ptr + 1) ){
+		*ptr = '\0';
+		ret = MQTT_transporter_add_pub_topic(trans, topics);
+		if (ret < 0)
+			return ret;
+		++count;
+		topics = ptr + 1;
+	};
+	
+	ret = MQTT_transporter_add_pub_topic(trans, topics);
+	if ( ret < 0 )
+		return ret;
+	else
+		return ++count;
+}
 
 static int start_mqtt_connection(prelude_connection_t *cnx, 
                                  prelude_connection_permission_t reqperms, prelude_client_profile_t *profile)
@@ -373,7 +406,7 @@ static int start_mqtt_connection(prelude_connection_t *cnx,
 		return ret;
 	}
 
-	ret = MQTT_transporter_add_pub_topic(trans, "testprelude");
+	ret = mqtt_add_pub_topics_from_cnx(cnx, trans);
 	if ( ret < 0 ){
 		MQTT_transporter_destroy(&trans);
 		return ret;
@@ -564,13 +597,18 @@ static prelude_bool_t is_mqtt_addr(prelude_connection_t *cnx, const char *addr)
 {
 	int ret;
 	const char *ptr;
-	char *daddr;
+	char *daddr, *topics_ptr;
 	unsigned int dport;
 	
 	ret = strncmp(addr, "mqtt", 4);
 	if ( ret != 0 )
 		return FALSE;
 
+	topics_ptr = strrchr(addr, '/');
+	if ( topics_ptr && *(topics_ptr + 1) ){
+		*topics_ptr = '\0';
+		++topics_ptr;
+	}
 	ptr = strchr(addr, ':');
 	if ( ptr && *(ptr + 1) ){
 		cnx->dport = MQTT_PORT;
@@ -583,6 +621,10 @@ static prelude_bool_t is_mqtt_addr(prelude_connection_t *cnx, const char *addr)
 		cnx->daddr = strdup(MQTT_ADDR);
 		cnx->dport = MQTT_PORT;
 	}
+	/* Optionnal topics */
+	if ( topics_ptr )
+		cnx->extra_ddata = topics_ptr;
+
 	return TRUE;
 }
 
@@ -707,6 +749,8 @@ void prelude_connection_destroy(prelude_connection_t *conn)
         destroy_connection_fd(conn);
 
         free(conn->daddr);
+	/* if non-null, conn->extra_ddata share the same memory block as conn->daddr 
+	 * Hence, it does not need to be freed */ 
         free(conn->sa);
         free(conn);
 }
