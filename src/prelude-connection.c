@@ -114,6 +114,7 @@ struct prelude_connection {
 
         char *saddr;
         unsigned int sport;
+	void *extra_sdata;
 
         char *daddr;
         unsigned int dport;
@@ -365,9 +366,42 @@ static int mqtt_add_pub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 			return ret;
 		++count;
 		topics = ptr + 1;
-	};
+	}
+
+	if ( (ptr = strrchr(topics, ',')) )
+		*ptr = '\0';
 	
 	ret = MQTT_transporter_add_pub_topic(trans, topics);
+	if ( ret < 0 )
+		return ret;
+	else
+		return ++count;
+}
+
+static int mqtt_add_sub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transporter_t *trans)
+{
+	char *topics, *ptr;
+	int count, ret;
+
+	topics = (char *) cnx->extra_sdata;
+
+	count = 0;
+	if ( ! topics )
+		return count;
+	
+	while ( (ptr = strchr(topics, ',')) && *(ptr + 1) ){
+		*ptr = '\0';
+		ret = MQTT_transporter_add_sub_topic(trans, topics);
+		if (ret < 0)
+			return ret;
+		++count;
+		topics = ptr + 1;
+	}
+	
+	if ( (ptr = strrchr(topics, ',')) )
+		*ptr = '\0';
+
+	ret = MQTT_transporter_add_sub_topic(trans, topics);
 	if ( ret < 0 )
 		return ret;
 	else
@@ -407,6 +441,12 @@ static int start_mqtt_connection(prelude_connection_t *cnx,
 	}
 
 	ret = mqtt_add_pub_topics_from_cnx(cnx, trans);
+	if ( ret < 0 ){
+		MQTT_transporter_destroy(&trans);
+		return ret;
+	}
+
+	ret = mqtt_add_sub_topics_from_cnx(cnx, trans);
 	if ( ret < 0 ){
 		MQTT_transporter_destroy(&trans);
 		return ret;
@@ -593,22 +633,31 @@ static prelude_bool_t is_unix_addr(prelude_connection_t *cnx, const char *addr)
         return TRUE;
 }
 
+/* Check whetever addr is a MQTT address
+ * Recognized address are :
+ * mqtt:brokeraddress
+ * mqtt:brokeraddress:port
+ * mqtt:brokeraddress/comma-separated-list-of-publication-topics
+ * mqtt:brokeraddress:port/comma-separated-list-of-publication-topics
+ * mqtt:brokeraddress/comma-separated-list-of-publication-topics/comma-separated-list-of-subscription-topics
+ * mqtt:brokeraddress:port/comma-separated-list-of-publication-topics/comma-separated-list-of-subscription-topics
+ */
+ 
 static prelude_bool_t is_mqtt_addr(prelude_connection_t *cnx, const char *addr)
 {
 	int ret;
 	const char *ptr;
-	char *daddr, *topics_ptr;
+	char *daddr, *pubtopics_ptr, *subtopics_ptr;
 	unsigned int dport;
 	
 	ret = strncmp(addr, "mqtt", 4);
 	if ( ret != 0 )
 		return FALSE;
 
-	topics_ptr = strrchr(addr, '/');
-	if ( topics_ptr && *(topics_ptr + 1) ){
-		*topics_ptr = '\0';
-		++topics_ptr;
-	}
+	pubtopics_ptr = strchr(addr, '/');
+	if ( pubtopics_ptr )
+		*pubtopics_ptr = '\0';
+
 	ptr = strchr(addr, ':');
 	if ( ptr && *(ptr + 1) ){
 		cnx->dport = MQTT_PORT;
@@ -622,8 +671,15 @@ static prelude_bool_t is_mqtt_addr(prelude_connection_t *cnx, const char *addr)
 		cnx->dport = MQTT_PORT;
 	}
 	/* Optionnal topics */
-	if ( topics_ptr )
-		cnx->extra_ddata = topics_ptr;
+	if ( pubtopics_ptr && *(++pubtopics_ptr) ){
+		if ( (subtopics_ptr = strchr(pubtopics_ptr, '/')) ){
+			*subtopics_ptr = '\0';
+			if (pubtopics_ptr != subtopics_ptr)
+				cnx->extra_ddata = pubtopics_ptr;
+			if ( *(++subtopics_ptr) )
+				cnx->extra_sdata = subtopics_ptr;
+		}
+	}
 
 	return TRUE;
 }
@@ -750,7 +806,8 @@ void prelude_connection_destroy(prelude_connection_t *conn)
 
         free(conn->daddr);
 	/* if non-null, conn->extra_ddata share the same memory block as conn->daddr 
-	 * Hence, it does not need to be freed */ 
+	 * if non-null, conn->extra_sdata share the same memory block as conn->daddr 
+	 * Hence, they do not need to be freed */ 
         free(conn->sa);
         free(conn);
 }
