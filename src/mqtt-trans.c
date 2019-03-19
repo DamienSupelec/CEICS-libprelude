@@ -7,6 +7,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 #include "MQTTAsync.h"
 #include "mqtt-trans.h"
@@ -172,18 +174,19 @@ struct MQTT_transporter {
 	str_list_t *pubtopics;
 	str_list_t *subtopics;
 	int wfd;
+	pthread_mutex_t pipemutex;
 	struct {
-		int wait:1;
+		sem_t sem;
 		int success:1;
 	} lock;
 };
 
-#define prepare_sleep(trans) do{ (trans)->lock.wait=1; (trans)->lock.success=0;} while(0)
-#define operation_success(trans) do{ (trans)->lock.wait=0; (trans)->lock.success=1;} while(0)
-#define operation_failure(trans) do{ (trans)->lock.wait=0; (trans)->lock.success=0;} while(0)
+#define prepare_sleep(trans) do{ (trans)->lock.success=0;} while(0)
+#define operation_success(trans) do{ (trans)->lock.success=1; sem_post(&((trans)->lock.sem)); } while(0)
+#define operation_failure(trans) do{ (trans)->lock.success=0; sem_post(&((trans)->lock.sem)); } while(0)
 #define operation_is_successful(trans)  ((trans)->lock.success)
 #define sleep_till_completion(trans) do{\
-                                     	while ( (trans)->lock.wait ) usleep(10000);\
+                                        sem_wait(&((trans)->lock.sem));\
                                      }while(0)
 
 /* Creates a new MQTT_transport_t object into *new
@@ -218,6 +221,15 @@ int MQTT_transporter_new(MQTT_transporter_t **new, int * const rfd, const char *
 		perror("fcntl failed while making read-end pipe non blocking: ");
 		free(newtrans);
 		return ret;
+	}
+	
+	newtrans->pipemutex = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+	
+	ret = sem_init(&(newtrans->lock.sem), 0, 0);
+	if ( ret < 0 ){
+		perror("sem_init failed: ");
+		free(newtrans);
+		return ret;	
 	}
 
 	size = snprintf(newtrans->address, 0, "ssl://%s:%u", address, port);
@@ -392,7 +404,9 @@ static int on_msg_arrived(void *context, char *topicname, int topiclen, MQTTAsyn
 	
 	written = 0;
 	do{
+		pthread_mutex_lock(&trans->pipemutex);
 		written = write(trans->wfd, ((unsigned char *)message->payload) + written, message->payloadlen - written);
+		pthread_mutex_unlock(&trans->pipemutex);
 		if (written < 0)
 			perror("write failed: ");
 	} while (written < message->payloadlen); 
@@ -629,6 +643,8 @@ void MQTT_transporter_destroy(MQTT_transporter_t **trans)
 	str_list_destroy(&(*trans)->pubtopics);
 	str_list_destroy(&(*trans)->subtopics);
 	close((*trans)->wfd);	
+	pthread_mutex_destroy(&(*trans)->pipemutex);
+	sem_destroy(&((*trans)->lock.sem));
 	free(*trans);
 	*trans = NULL;
 }
