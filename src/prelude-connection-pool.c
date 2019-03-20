@@ -556,7 +556,6 @@ static int set_state_alive(cnx_t *cnx, prelude_bool_t global_notice)
 
         FD_SET(fd, &pool->fds);
         pool->nfd = MAX(fd + 1, pool->nfd);
-
         return 0;
 }
 

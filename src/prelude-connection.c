@@ -381,20 +381,18 @@ static int mqtt_add_pub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 static int mqtt_add_sub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transporter_t *trans)
 {
 	char *topics, *ptr;
-	int count, ret;
+	int ret;
 
 	topics = (char *) cnx->extra_sdata;
 
-	count = 0;
 	if ( ! topics )
-		return count;
+		return 0;
 	
 	while ( (ptr = strchr(topics, ',')) && *(ptr + 1) ){
 		*ptr = '\0';
 		ret = MQTT_transporter_add_sub_topic(trans, topics);
 		if (ret < 0)
 			return ret;
-		++count;
 		topics = ptr + 1;
 	}
 	
@@ -404,15 +402,14 @@ static int mqtt_add_sub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 	ret = MQTT_transporter_add_sub_topic(trans, topics);
 	if ( ret < 0 )
 		return ret;
-	else
-		return ++count;
+	ret = MQTT_transporter_subscribe(trans);
+	return ret;
 }
 
 static int start_mqtt_connection(prelude_connection_t *cnx, 
                                  prelude_connection_permission_t reqperms, prelude_client_profile_t *profile)
 {
-	int ret;
-	int rfd;
+	int ret, rfd;
 	MQTT_transporter_t *trans;
 	pki_credentials_t *cred;
 	prelude_string_t *gbuf, *wbuf;
@@ -474,7 +471,7 @@ static int start_mqtt_connection(prelude_connection_t *cnx,
 		return ret;
 	}
 
-	prelude_io_set_mqtt_io(cnx->fd, trans);
+	prelude_io_set_mqtt_io(cnx->fd, trans, rfd);
 
 	return 0;
 }
@@ -566,7 +563,7 @@ static int do_connect(prelude_connection_t *cnx,
         int ret = 0;
 
 	if ( cnx->type == PRELUDE_CONNECTION_TYPE_MQTT ) {
-                prelude_log(PRELUDE_LOG_INFO, "Connecting to MQTT broker %s .\n", cnx->daddr);
+                prelude_log(PRELUDE_LOG_INFO, "Connecting to MQTT broker %s:%u .\n", cnx->daddr, cnx->dport);
 		ret = start_mqtt_connection(cnx, reqperms, profile);
 		return ret;
 	}

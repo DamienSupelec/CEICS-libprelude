@@ -53,7 +53,7 @@ void prelude_io_set_sys_io(prelude_io_t *pio, int fd);
 
 int prelude_io_set_buffer_io(prelude_io_t *pio);
 
-void prelude_io_set_mqtt_io(prelude_io_t *pio, void *transporter);
+void prelude_io_set_mqtt_io(prelude_io_t *pio, void *transporter, int rfd);
 
 /*
  *
