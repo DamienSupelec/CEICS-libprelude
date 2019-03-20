@@ -352,6 +352,7 @@ static int mqtt_add_pub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 
 	count = 0;
 	if ( ! topics ){
+                prelude_log(PRELUDE_LOG_INFO, "Will publish to topic \'%s\' on MQTT broker %s:%u .\n", DEFAULT_MQTT_PUB_TOPIC, cnx->daddr, cnx->dport);
 	 	ret = MQTT_transporter_add_pub_topic(trans, DEFAULT_MQTT_PUB_TOPIC);
 		if (ret < 0)
 			return ret;
@@ -361,6 +362,7 @@ static int mqtt_add_pub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 	
 	while ( (ptr = strchr(topics, ',')) && *(ptr + 1) ){
 		*ptr = '\0';
+                prelude_log(PRELUDE_LOG_INFO, "Will publish to topic \'%s\' on MQTT broker %s:%u .\n", topics, cnx->daddr, cnx->dport);
 		ret = MQTT_transporter_add_pub_topic(trans, topics);
 		if (ret < 0)
 			return ret;
@@ -371,6 +373,7 @@ static int mqtt_add_pub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 	if ( (ptr = strrchr(topics, ',')) )
 		*ptr = '\0';
 	
+        prelude_log(PRELUDE_LOG_INFO, "Will publish to topic \'%s\' on MQTT broker %s:%u .\n", topics, cnx->daddr, cnx->dport);
 	ret = MQTT_transporter_add_pub_topic(trans, topics);
 	if ( ret < 0 )
 		return ret;
@@ -390,6 +393,7 @@ static int mqtt_add_sub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 	
 	while ( (ptr = strchr(topics, ',')) && *(ptr + 1) ){
 		*ptr = '\0';
+        	prelude_log(PRELUDE_LOG_INFO, "Subscribing to topic \'%s\' on MQTT broker %s:%u .\n", topics, cnx->daddr, cnx->dport);
 		ret = MQTT_transporter_add_sub_topic(trans, topics);
 		if (ret < 0)
 			return ret;
@@ -399,6 +403,7 @@ static int mqtt_add_sub_topics_from_cnx(prelude_connection_t *cnx, MQTT_transpor
 	if ( (ptr = strrchr(topics, ',')) )
 		*ptr = '\0';
 
+       	prelude_log(PRELUDE_LOG_INFO, "Subscribing to topic \'%s\' on MQTT broker %s:%u .\n", topics, cnx->daddr, cnx->dport);
 	ret = MQTT_transporter_add_sub_topic(trans, topics);
 	if ( ret < 0 )
 		return ret;
