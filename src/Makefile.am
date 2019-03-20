@@ -25,6 +25,7 @@ libprelude_la_SOURCES = 		\
 	pki-auth.c                      \
 	mqtt-trans.c                    \
 	tls-util.c			\
+	mqtt-util.c                     \
 	variable.c			\
 	prelude.c			\
 	prelude-async.c			\

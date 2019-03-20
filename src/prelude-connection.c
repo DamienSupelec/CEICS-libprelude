@@ -70,7 +70,7 @@
 #include "tls-auth.h"
 #include "pki-auth.h"
 #include "mqtt-trans.h"
-
+#include "mqtt-util.h"
 
 #define PRELUDE_CONNECTION_OWN_FD 0x02
 
@@ -415,8 +415,30 @@ static int start_mqtt_connection(prelude_connection_t *cnx,
 	int rfd;
 	MQTT_transporter_t *trans;
 	pki_credentials_t *cred;
+	prelude_string_t *gbuf, *wbuf;
 
 	ret = prelude_client_profile_get_pkicredentials(profile, (void **) &cred);
+
+	mqtt_set_conn_perm_from_profile(&cnx->permission, profile);
+	if ( (cnx->permission & reqperms) != reqperms ){
+		ret = prelude_string_new(&gbuf);
+		if (ret < 0)
+			return ret;
+		ret = prelude_string_new(&wbuf);
+		if (ret < 0){
+			prelude_string_destroy(gbuf);
+			return ret;
+		}
+		prelude_connection_permission_to_string(cnx->permission, gbuf);
+		prelude_connection_permission_to_string(reqperms, wbuf);
+		ret = auth_error(cnx, reqperms, profile, prelude_error(PRELUDE_ERROR_PROFILE),
+		                 "Insufficient credentials: got '%s' but at least '%s' required",
+		                 prelude_string_get_string(gbuf), prelude_string_get_string(wbuf));
+		prelude_string_destroy(gbuf);
+		prelude_string_destroy(wbuf);
+	}
+
+
 
 	ret = MQTT_transporter_new(&trans, &rfd, cnx->daddr, cnx->dport);
 	if ( ret < 0 )
