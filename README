@@ -76,7 +76,7 @@ Dependencies
 
 (*) As no package exist for this dependency,
     it has to be built from source.
-    Source are available at https://github.com/eclipse/paho.mqtt.c
+    Sources are available at https://github.com/eclipse/paho.mqtt.c
 
 IRC
 ===
