@@ -70,12 +70,13 @@
 #include "tls-auth.h"
 #include "pki-auth.h"
 #include "mqtt-trans.h"
-#include "mqtt-util.h"
+#include "amqp-trans.h"
+#include "pki-util.h"
 
 #define PRELUDE_CONNECTION_OWN_FD 0x02
 
 #define DEFAULT_MQTT_PUB_TOPIC "pubprelude"
-
+#define DEFAULT_AMQP_PUB_QUEUE "pubprelude"
 /*
  * Default port to connect to.
  */
@@ -95,6 +96,16 @@
  * Default MQTT port
  */
 #define MQTT_PORT 8883
+
+/*
+ * Default AMQP address
+ */
+#define AMQP_ADDR "localhost"
+
+/*
+ * Default AMQP port
+ */
+#define AMQP_PORT 5671
 
 
 /*
@@ -421,7 +432,7 @@ static int start_mqtt_connection(prelude_connection_t *cnx,
 
 	ret = prelude_client_profile_get_pkicredentials(profile, (void **) &cred);
 
-	mqtt_set_conn_perm_from_profile(&cnx->permission, profile);
+	pki_set_conn_perm_from_profile(&cnx->permission, profile);
 	if ( (cnx->permission & reqperms) != reqperms ){
 		ret = prelude_string_new(&gbuf);
 		if (ret < 0)
@@ -480,6 +491,138 @@ static int start_mqtt_connection(prelude_connection_t *cnx,
 
 	return 0;
 }
+
+static int amqp_add_pub_queues_from_cnx(prelude_connection_t *cnx, AMQP_transporter_t *trans)
+{
+	char *queues, *ptr;
+	int count, ret;
+
+	queues = (char *) cnx->extra_ddata;
+
+	count = 0;
+	if ( ! queues ){
+                prelude_log(PRELUDE_LOG_INFO, "Will publish to queue \'%s\' on AMQP broker %s:%u .\n", DEFAULT_AMQP_PUB_QUEUE, cnx->daddr, cnx->dport);
+	 	ret = AMQP_transporter_add_pub_queue(trans, DEFAULT_AMQP_PUB_QUEUE);
+		if (ret < 0)
+			return ret;
+		++count;
+		return count;
+	}
+	
+	while ( (ptr = strchr(queues, ',')) && *(ptr + 1) ){
+		*ptr = '\0';
+                prelude_log(PRELUDE_LOG_INFO, "Will publish to queue \'%s\' on AMQP broker %s:%u .\n", queues, cnx->daddr, cnx->dport);
+		ret = AMQP_transporter_add_pub_queue(trans, queues);
+		if (ret < 0)
+			return ret;
+		++count;
+		queues = ptr + 1;
+	}
+
+	if ( (ptr = strrchr(queues, ',')) )
+		*ptr = '\0';
+	
+        prelude_log(PRELUDE_LOG_INFO, "Will publish to queue \'%s\' on AMQP broker %s:%u .\n", queues, cnx->daddr, cnx->dport);
+	ret = AMQP_transporter_add_pub_queue(trans, queues);
+	if ( ret < 0 )
+		return ret;
+	else
+		return ++count;
+}
+
+static int amqp_add_sub_queues_from_cnx(prelude_connection_t *cnx, AMQP_transporter_t *trans)
+{
+	char *queues, *ptr;
+	int ret;
+
+	queues = (char *) cnx->extra_sdata;
+
+	if ( ! queues )
+		return 0;
+	
+	while ( (ptr = strchr(queues, ',')) && *(ptr + 1) ){
+		*ptr = '\0';
+        	prelude_log(PRELUDE_LOG_INFO, "Subscribing to queue \'%s\' on AMQP broker %s:%u .\n", queues, cnx->daddr, cnx->dport);
+		ret = AMQP_transporter_add_sub_queue(trans, queues);
+		if (ret < 0)
+			return ret;
+		queues = ptr + 1;
+	}
+	
+	if ( (ptr = strrchr(queues, ',')) )
+		*ptr = '\0';
+
+       	prelude_log(PRELUDE_LOG_INFO, "Subscribing to queue \'%s\' on AMQP broker %s:%u .\n", queues, cnx->daddr, cnx->dport);
+	ret = AMQP_transporter_add_sub_queue(trans, queues);
+	if ( ret < 0 )
+		return ret;
+	return ret;
+}
+
+static int start_amqp_connection(prelude_connection_t *cnx, 
+                                 prelude_connection_permission_t reqperms, prelude_client_profile_t *profile)
+{
+	int ret, rfd;
+	AMQP_transporter_t *trans;
+	pki_credentials_t *cred;
+	prelude_string_t *gbuf, *wbuf;
+
+	ret = prelude_client_profile_get_pkicredentials(profile, (void **) &cred);
+
+	pki_set_conn_perm_from_profile(&cnx->permission, profile);
+	if ( (cnx->permission & reqperms) != reqperms ){
+		ret = prelude_string_new(&gbuf);
+		if (ret < 0)
+			return ret;
+		ret = prelude_string_new(&wbuf);
+		if (ret < 0){
+			prelude_string_destroy(gbuf);
+			return ret;
+		}
+		prelude_connection_permission_to_string(cnx->permission, gbuf);
+		prelude_connection_permission_to_string(reqperms, wbuf);
+		ret = auth_error(cnx, reqperms, profile, prelude_error(PRELUDE_ERROR_PROFILE),
+		                 "Insufficient credentials: got '%s' but at least '%s' required",
+		                 prelude_string_get_string(gbuf), prelude_string_get_string(wbuf));
+		prelude_string_destroy(gbuf);
+		prelude_string_destroy(wbuf);
+	}
+
+
+
+	ret = AMQP_transporter_new(&trans, &rfd, cnx->daddr, cnx->dport);
+	if ( ret < 0 )
+		return ret;
+	
+	ret = AMQP_transporter_set_pkicredentials(trans, pki_credentials_get_pubcert(cred), pki_credentials_get_privkey(cred), pki_credentials_get_trustca(cred));
+	if ( ret < 0 ){
+		AMQP_transporter_destroy(&trans);
+		return ret;
+	}
+
+	ret = amqp_add_pub_queues_from_cnx(cnx, trans);
+	if ( ret < 0 ){
+		AMQP_transporter_destroy(&trans);
+		return ret;
+	}
+
+	ret = amqp_add_sub_queues_from_cnx(cnx, trans);
+	if ( ret < 0 ){
+		AMQP_transporter_destroy(&trans);
+		return ret;
+	}
+
+	ret = AMQP_transporter_connect(trans);
+	if ( ret < 0 ){
+		AMQP_transporter_destroy(&trans);
+		return ret;
+	}
+
+	prelude_io_set_amqp_io(cnx->fd, trans, rfd);
+
+	return 0;
+}
+
 
 
 static int start_inet_connection(prelude_connection_t *cnx,
@@ -570,6 +713,12 @@ static int do_connect(prelude_connection_t *cnx,
 	if ( cnx->type == PRELUDE_CONNECTION_TYPE_MQTT ) {
                 prelude_log(PRELUDE_LOG_INFO, "Connecting to MQTT broker %s:%u .\n", cnx->daddr, cnx->dport);
 		ret = start_mqtt_connection(cnx, reqperms, profile);
+		return ret;
+	}
+
+	if ( cnx->type == PRELUDE_CONNECTION_TYPE_AMQP ) {
+		prelude_log(PRELUDE_LOG_INFO, "Connection to AMQP broker %s:%u .\n", cnx->daddr, cnx->dport);
+		ret = start_amqp_connection(cnx, reqperms, profile);
 		return ret;
 	}
 
@@ -708,6 +857,56 @@ static prelude_bool_t is_mqtt_addr(prelude_connection_t *cnx, const char *addr)
 	return TRUE;
 }
 
+/* Check whetever addr is an AMQP address
+ * Recognized address are :
+ * amqp:brokeraddress
+ * amqp:brokeraddress:port
+ * amqp:brokeraddress/comma-separated-list-of-publication-queues
+ * amqp:brokeraddress:port/comma-separated-list-of-publication-queues
+ * amqp:brokeraddress/comma-separated-list-of-publication-queues/comma-separated-list-of-subscription-queues
+ * amqp:brokeraddress:port/comma-separated-list-of-publication-quues/comma-separated-list-of-subscription-queues
+ */
+ 
+static prelude_bool_t is_amqp_addr(prelude_connection_t *cnx, const char *addr)
+{
+	int ret;
+	const char *ptr;
+	char *daddr, *pubqueues_ptr, *subqueues_ptr;
+	unsigned int dport;
+	
+	ret = strncmp(addr, "amqp", 4);
+	if ( ret != 0 )
+		return FALSE;
+
+	pubqueues_ptr = strchr(addr, '/');
+	if ( pubqueues_ptr )
+		*pubqueues_ptr = '\0';
+
+	ptr = strchr(addr, ':');
+	if ( ptr && *(ptr + 1) ){
+		cnx->dport = AMQP_PORT;
+		ret = prelude_parse_address(ptr + 1, &daddr, &dport);
+		if ( ret < 0 )
+			return ret;
+		cnx->daddr = daddr;
+		cnx->dport = dport;
+	} else {
+		cnx->daddr = strdup(AMQP_ADDR);
+		cnx->dport = AMQP_PORT;
+	}
+	/* Optionnal queues */
+	if ( pubqueues_ptr && *(++pubqueues_ptr) ){
+		if ( (subqueues_ptr = strchr(pubqueues_ptr, '/')) ){
+			*subqueues_ptr = '\0';
+			if (pubqueues_ptr != subqueues_ptr)
+				cnx->extra_ddata = pubqueues_ptr;
+			if ( *(++subqueues_ptr) )
+				cnx->extra_sdata = subqueues_ptr;
+		}
+	}
+
+	return TRUE;
+}
 
 
 static int do_getaddrinfo(prelude_connection_t *cnx, struct addrinfo **ai, const char *addr_string)
@@ -761,6 +960,9 @@ static int resolve_addr(prelude_connection_t *cnx, const char *addr)
 	if ( is_mqtt_addr(cnx, addr) ) {
 		cnx->type = PRELUDE_CONNECTION_TYPE_MQTT;
 		return 0;	
+	} else if ( is_amqp_addr(cnx, addr) ) {
+		cnx->type = PRELUDE_CONNECTION_TYPE_AMQP;
+		return 0;
 	} else if ( is_unix_addr(cnx, addr) ) {
 #if (defined _WIN32 || defined __WIN32__) && !defined __CYGWIN__
                 return prelude_error_verbose(PRELUDE_ERROR_GENERIC, "UNIX socket are not supported under this environment");

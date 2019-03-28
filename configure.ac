@@ -278,6 +278,27 @@ AC_SUBST(LIBMQTT3AS_LIBS)
 LIBS=$old_LIBS
 CPPFLAGS=$old_CPPFLAGS
 
+dnl *************************************************
+dnl * Check for Python 3.5m.                        *
+dnl *************************************************
+
+old_LIBS=$LIBS
+old_CPPFLAGS=$CPPFLAGS
+LIBPYTHON35M_LIBS="python3.5m"
+LIBPYTHON35M_CFLAGS=""
+LIBPYTHON35M_LDFLAGS="-lpython3.5m"
+LIBS="$LIBPYTHON35M_LIBS"
+CPPFLAGS="$LIBPYTHON35M_CFLAGS"
+
+AC_CHECK_HEADER(python3.5m/Python.h, ,
+                AC_MSG_ERROR("Python3.5m library header required to build libprelude"))
+
+AC_SUBST(LIBPYTHON35M_CFLAGS)
+AC_SUBST(LIBPYTHON35M_LDFLAGS)
+AC_SUBST(LIBPYTHON35M_LIBS)
+
+LIBS=$old_LIBS
+CPPFLAGS=$old_CPPFLAGS
 
 dnl **************************************************
 dnl * Check for Ipv6.                                *

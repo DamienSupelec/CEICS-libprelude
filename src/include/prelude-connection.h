@@ -42,7 +42,8 @@ typedef enum {
 typedef enum {
 	PRELUDE_CONNECTION_TYPE_TLS,
 	PRELUDE_CONNECTION_TYPE_UNIX,
-	PRELUDE_CONNECTION_TYPE_MQTT
+	PRELUDE_CONNECTION_TYPE_MQTT,
+	PRELUDE_CONNECTION_TYPE_AMQP
 } prelude_connection_type_t;
 
 typedef struct prelude_connection prelude_connection_t;

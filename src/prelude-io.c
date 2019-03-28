@@ -45,6 +45,7 @@
 #include "prelude-io.h"
 #include "common.h"
 #include "mqtt-trans.h"
+#include "amqp-trans.h"
 
 #define PRELUDE_ERROR_SOURCE_DEFAULT PRELUDE_ERROR_SOURCE_IO
 #include "prelude-error.h"
@@ -447,7 +448,57 @@ static int mqtt_close(prelude_io_t *pio)
 	return 0;	
 }
 
+/*
+ * AMQP I/O Functions
+ */
 
+static ssize_t amqp_read(prelude_io_t *pio, void *buf, size_t count)
+{
+	ssize_t ret;
+	
+	do {
+		ret = read(pio->fd, buf, count);
+	} while ( ret < 0 && errno == EINTR );
+	if ( ret == 0 )
+		return prelude_error(PRELUDE_ERROR_EOF);
+	if ( ret < 0 )
+		return prelude_error_from_errno(errno);
+	return ret;	
+}
+
+static ssize_t amqp_write(prelude_io_t *pio, const void *buf, size_t count)
+{
+	int ret;
+	
+	ret = AMQP_transporter_send((AMQP_transporter_t *) pio->fd_ptr, buf, count);
+	if ( ret < 0 )
+		return prelude_error_from_errno(errno);
+	return ret;
+
+}
+
+static ssize_t amqp_pending(prelude_io_t *pio)
+{
+	long ret = 0;
+	
+	if ( ioctl(pio->fd, FIONREAD, &ret) < 0 )
+		return prelude_error_from_errno(errno);
+	return ret;	
+}
+
+static int amqp_close(prelude_io_t *pio)
+{
+	if ( pio->fd_ptr ){
+		AMQP_transporter_disconnect((AMQP_transporter_t *) pio->fd_ptr);
+		AMQP_transporter_destroy((AMQP_transporter_t **) &pio->fd_ptr);
+		pio->fd_ptr = NULL;		
+	}
+	if ( pio->fd ){
+		close(pio->fd);
+		pio->fd = 0;
+	}
+	return 0;	
+}
 
 /*
  * Forward data from one fd to another using copy.
@@ -876,6 +927,21 @@ void prelude_io_set_mqtt_io(prelude_io_t *pio, void *transporter, int rfd)
 	pio->write = mqtt_write;
 	pio->close = mqtt_close;
 	pio->pending = mqtt_pending;
+}
+
+void prelude_io_set_amqp_io(prelude_io_t *pio, void *transporter, int rfd)
+{
+	prelude_return_if_fail(pio);
+
+	pio->fd_ptr = NULL;
+	pio->size = pio->rindex = 0;
+	pio->fd = rfd;
+	
+	pio->fd_ptr = transporter;
+	pio->read = amqp_read;
+	pio->write = amqp_write;
+	pio->close = amqp_close;
+	pio->pending = amqp_pending;
 }
 
 /**

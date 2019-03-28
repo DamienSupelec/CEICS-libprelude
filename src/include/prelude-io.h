@@ -55,6 +55,7 @@ int prelude_io_set_buffer_io(prelude_io_t *pio);
 
 void prelude_io_set_mqtt_io(prelude_io_t *pio, void *transporter, int rfd);
 
+void prelude_io_set_amqp_io(prelude_io_t *pio, void *transporter, int rfd);
 /*
  *
  */

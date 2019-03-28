@@ -7,9 +7,12 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libprelude.pc
 DISTCLEANFILES = $(pkgconfig_DATA) idmef-criteria-string.yac.h idmef-criteria-string.lex.c idmef-criteria-string.yac.c
 
+py35localmoduledir = /usr/local/lib/python3.5/dist-packages
+py35localmodule_DATA = pikalib.py
+
 libpreludeincludedir = $(includedir)/
 libprelude_la_LIBADD = @LIBPRELUDE_LIBS@ $(LIBLTDL) $(top_builddir)/libmissing/libmissing.la libprelude-error/libprelude-error.la
-libprelude_la_LDFLAGS = $(GETADDRINFO_LIB) $(GETHOSTNAME_LIB) $(HOSTENT_LIB) $(INET_NTOP_LIB) $(INET_PTON_LIB) $(LIBSOCKET) $(LIB_POLL) $(LIB_PTHREAD_SIGMASK) $(LIB_SELECT) $(LTLIBINTL) $(LTLIBTHREAD) $(SERVENT_LIB) $(LIBMQTT3AS_LDFLAGS) -no-undefined -version-info @LIBPRELUDE_SONAME@ -export-symbols-regex "^(idmef|_?prelude)_"
+libprelude_la_LDFLAGS = $(GETADDRINFO_LIB) $(GETHOSTNAME_LIB) $(HOSTENT_LIB) $(INET_NTOP_LIB) $(INET_PTON_LIB) $(LIBSOCKET) $(LIB_POLL) $(LIB_PTHREAD_SIGMASK) $(LIB_SELECT) $(LTLIBINTL) $(LTLIBTHREAD) $(SERVENT_LIB) $(LIBMQTT3AS_LDFLAGS) $(LIBPYTHON35M_LDFLAGS) -no-undefined -version-info @LIBPRELUDE_SONAME@ -export-symbols-regex "^(idmef|_?prelude)_"
 lib_LTLIBRARIES = libprelude.la
 BUILT_SOURCES = $(LTDLDEPS) 
 
@@ -24,8 +27,10 @@ libprelude_la_SOURCES = 		\
 	tls-auth.c			\
 	pki-auth.c                      \
 	mqtt-trans.c                    \
+	amqp-trans.c                    \
+	cpikalib.c                      \
 	tls-util.c			\
-	mqtt-util.c                     \
+	pki-util.c                      \
 	variable.c			\
 	prelude.c			\
 	prelude-async.c			\
