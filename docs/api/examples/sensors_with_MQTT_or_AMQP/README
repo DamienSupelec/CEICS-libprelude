@@ -1,0 +1,85 @@
+Introduction
+============
+
+Ceci est un premier livrable, permettant de tester le transport MQTT dans la libprelude. 
+Il comporte une sonde (sensor1) envoyant un message IDMEF, et une sonde (sensor2) à l'écoute.
+
+Prérequis
+=========
+
+Sont requis:
+- le fork CEI-CSlibprelude
+- un serveur MQTT, avec un utilisateur MQTT "mqtt_u1" ayant pour mot de passe "mqtt_p1"
+- un prelude manager, afin de pouvoir register les deux sondes
+
+Installation de CEI-CSlibprelude
+================================
+
+Les sources et les instructions sont disponibles à https://github.com/DamienSupelec/CEICS-libprelude
+
+Installation du serveur RabbitMQ
+================================
+
+Sous Debian : apt install rabbitmq-server
+
+Configuration du serveur RabbitMQ
+================================
+
+Activation du plugin MQTT :
+	rabbitmq-plugins enable rabbitmq_mqtt
+
+Ajout de l'utilisateur :
+	rabbitmqctl add_user mqtt_u1 mqtt_p1
+	rabbitmqctl set_permissions -p / mqtt_u1 ".*" ".*" ".*"
+
+Fichier de configuration :
+	Le fichier de configuration du serveur est rabbitmq_conf/rabbitmq.config
+	Il doit etre placé dans /etc/rabbitmq
+	Il doit etre lisible par rabbitmq
+	chown rabbitmq:rabbitmq rabbitmq.config
+	chmod a+r rabbitmq.config
+
+Certificats et clefs :
+	Des certificats et clefs privees pour le serveur sont disponibles dans rabbitmq_conf/
+
+	rmqtrustedCA.pem contient le certificat de la CA en qui rabbitmq a confiance. La configuration le cherche dans /etc/rabbitmq/
+	certs/ contient les clefs publiques et privees de rabbitmq. La configuration cherche ce dossier dans /etc/rabbitmq/
+	
+	rmqtrustedCA.pem, certs/rmq.key, certs/rmq.pem doivent appartenir à l'utilisateur rabbitmq
+	certs/rmq.key doit avoir pour permission 600
+
+Redémarrage du serveur :
+	service rabbitmq-server restart
+
+
+Configuration des sondes
+========================
+
+Pour les sondes sensor1 et sensor2 :
+	prelude-admin register <sensor1 ou 2> <droits> <address manager> --uid <uid> --gid <gid>
+
+Le sensor1 nécessite des droits idmef:w et le sensor2 idmef:rw
+
+Pour chaque sonde, ajouter les certificats utilisés par MQTT. Ces certificats sont présents dans les dossiers profile_sensor1/2.
+Ils doivent être placés dans le dossier du profil libprelude associé à la sonde.
+
+Résolution des server_addr
+==========================
+
+Dans le fichier de configuration du profile de sensor1:
+	server-addr = mqtt:<ip broker MQTT>:<port d'écoute du broker MQTT>
+
+Dans le fichier de configuration du profile de sensor2:
+	server-addr = mqtt:<ip broker MQTT>:<port d'écoute du broker MQTT>//pubprelude
+
+Le format général de server-addr pour MQTT est :
+	mqtt:<ip broker>:<port>/<topics de publication séparés par une virgule>/<topics d'écoute séparés par une virgule>
+	Si aucun topic de publication n'est précisé, MQTT utilise par défaut "pubprelude".
+	Si aucun topic d'écoute n'est précisé, la sonde n'écoutera pas.
+
+Création des sondes
+====================
+
+Un MakeFile est fourni pour la compilation.
+Lancer les éxécutables en commençant par sensor2.
+
